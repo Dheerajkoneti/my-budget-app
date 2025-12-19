@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dini's Budget Alerter</title>
+    <style>
+        :root {
+            --primary: #2ecc71;
+            --danger: #e74c3c;
+            --warning: #f1c40f;
+            --dark: #2c3e50;
+            --accent: #3498db;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f7f6;
+            display: flex;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            width: 100%;
+            max-width: 400px;
+        }
+
+        h2 { text-align: center; color: var(--dark); margin-bottom: 5px; }
+        p.subtitle { text-align: center; color: #7f8c8d; font-size: 0.9em; margin-bottom: 20px; }
+
+        /* Setup Section */
+        #setup-section {
+            background: #ecf0f1;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            border: 2px dashed #bdc3c7;
+        }
+
+        /* App Section */
+        #app-section { display: none; }
+
+        .balance-card {
+            background: var(--dark);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        #balance-amount {
+            font-size: 2.5em;
+            font-weight: bold;
+            display: block;
+        }
+
+        .input-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; color: var(--dark); }
+
+        input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            box-sizing: border-box;
+            font-size: 16px;
+        }
+
+        button {
+            width: 100%;
+            padding: 12px;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+
+        .btn-set { background-color: var(--accent); }
+        .btn-deduct { background-color: var(--primary); }
+        button:hover { opacity: 0.9; }
+
+        #alert-box {
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 8px;
+            display: none;
+            text-align: center;
+            font-weight: bold;
+        }
+
+        .history {
+            margin-top: 20px;
+            border-top: 1px solid #eee;
+            padding-top: 10px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .history-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #f9f9f9;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Budget Alerter 💡</h2>
+    <p class="subtitle">Track every rupee you spend</p>
+
+    <div id="setup-section">
+        <div class="input-group">
+            <label>Set Your Total Budget (₹)</label>
+            <input type="number" id="initial-budget" placeholder="Enter amount (e.g. 5000)">
+        </div>
+        <button class="btn-set" onclick="startApp()">Set Budget & Start</button>
+    </div>
+
+    <div id="app-section">
+        <div class="balance-card">
+            <span style="font-size: 0.8em; opacity: 0.8;">REMAINING BALANCE</span>
+            <span id="balance-amount">₹0</span>
+        </div>
+
+        <div id="alert-box"></div>
+
+        <div class="input-group">
+            <label>Shop Name / Reason</label>
+            <input type="text" id="shop-name" placeholder="e.g. Tea Shop, Bus">
+        </div>
+
+        <div class="input-group">
+            <label>Amount Spent (₹)</label>
+            <input type="number" id="spend-amount" placeholder="0.00">
+        </div>
+
+        <button class="btn-deduct" onclick="deductMoney()">Deduct Amount</button>
+
+        <div class="history">
+            <strong>Recent Spending:</strong>
+            <div id="history-list"></div>
+        </div>
+        
+        <button onclick="resetApp()" style="margin-top:20px; background:none; color:#7f8c8d; font-size:0.8em; text-decoration:underline; cursor:pointer; border:none; display:block; width:100%;">
+    Reset Everything
+</button>
+    </div>
+</div>
+
+<script>
+    let currentBalance = 0;
+    let initialLimit = 0;
+
+    // --- 1. THE "LOADER": This runs the moment the page opens ---
+    window.onload = function() {
+        const savedBalance = localStorage.getItem('budget_balance');
+        const savedLimit = localStorage.getItem('budget_limit');
+        const savedHistory = localStorage.getItem('budget_history');
+
+        // If there is saved data, put it back on the screen
+        if (savedBalance !== null) {
+            currentBalance = parseFloat(savedBalance);
+            initialLimit = parseFloat(savedLimit);
+            document.getElementById('history-list').innerHTML = savedHistory;
+            
+            updateUI(); // Refresh the balance and colors
+            
+            // Hide setup and show the app
+            document.getElementById('setup-section').style.display = "none";
+            document.getElementById('app-section').style.display = "block";
+        }
+    };
+
+    function startApp() {
+        let val = parseFloat(document.getElementById('initial-budget').value);
+        if (val > 0) {
+            currentBalance = val; 
+            initialLimit = val;
+            
+            // Save the starting budget to LocalStorage
+            localStorage.setItem('budget_limit', val);
+            saveAndUpdate();
+            
+            document.getElementById('setup-section').style.display = "none";
+            document.getElementById('app-section').style.display = "block";
+        }
+    }
+
+    // --- UPDATED DEDUCT FUNCTION ---
+    function deductMoney() {
+        let amtInput = document.getElementById('spend-amount');
+        let shopInput = document.getElementById('shop-name');
+        let amt = parseFloat(amtInput.value);
+        let shop = shopInput.value || "Expense";
+        
+        if (amt > 0 && amt <= currentBalance) {
+            currentBalance -= amt;
+            
+            // Generate a unique ID for this expense so we can find it to edit later
+            const id = Date.now();
+            
+            addHistoryToUI(id, shop, amt);
+            saveAndUpdate();
+            
+            amtInput.value = "";
+            shopInput.value = "";
+        } else { 
+            alert("Please check the amount!"); 
+        }
+    }
+
+    // --- NEW: FUNCTION TO ADD ITEM TO UI WITH EDIT BUTTON ---
+    function addHistoryToUI(id, shop, amt) {
+        const historyList = document.getElementById('history-list');
+        const item = document.createElement('div');
+        item.className = 'history-item';
+        item.id = "item-" + id;
+        item.innerHTML = `
+            <span><strong>${shop}</strong>: -₹${amt}</span>
+            <button onclick="editExpense(${id}, '${shop}', ${amt})" 
+                    style="width:auto; padding:2px 8px; font-size:10px; background:var(--accent); margin-left:10px;">
+                Edit
+            </button>
+        `;
+        historyList.prepend(item);
+    }
+
+    // --- NEW: THE EDIT LOGIC ---
+    function editExpense(id, oldShop, oldAmt) {
+        // 1. Ask for new details
+        let newShop = prompt("Edit Shop Name:", oldShop);
+        let newAmt = parseFloat(prompt("Edit Amount (₹):", oldAmt));
+
+        if (newShop && !isNaN(newAmt) && newAmt > 0) {
+            // 2. Fix the balance: add back the old amount, subtract the new one
+            let balanceCorrection = oldAmt - newAmt;
+            
+            if (currentBalance + balanceCorrection < 0) {
+                alert("Insufficient balance for this edit!");
+                return;
+            }
+
+            currentBalance += balanceCorrection;
+
+            // 3. Update the UI item
+            const item = document.getElementById("item-" + id);
+            item.innerHTML = `
+                <span><strong>${newShop}</strong>: -₹${newAmt}</span>
+                <button onclick="editExpense(${id}, '${newShop}', ${newAmt})" 
+                        style="width:auto; padding:2px 8px; font-size:10px; background:var(--accent); margin-left:10px;">
+                    Edit
+                </button>
+            `;
+
+            // 4. Save the changes
+            saveAndUpdate();
+        }
+    }
+
+    function saveAndUpdate() {
+        localStorage.setItem('budget_balance', currentBalance);
+        localStorage.setItem('budget_history', document.getElementById('history-list').innerHTML);
+        updateUI();
+    }
+
+    function updateUI() {
+        document.getElementById('balance-amount').innerText = "₹" + currentBalance.toFixed(2);
+        let alertBox = document.getElementById('alert-box');
+        
+        // Calculate what percentage of the TOTAL budget is still remaining
+        let percRemaining = (currentBalance / initialLimit) * 100;
+        
+        alertBox.style.display = "block";
+
+        if (percRemaining <= 0) { 
+            // 0% left
+            alertBox.innerText = "🚨 Budget Finished!"; 
+            alertBox.style.background = "var(--danger)"; 
+            alertBox.style.color = "white"; 
+        } else if (percRemaining <= 20) { 
+            // 20% or less left
+            alertBox.innerText = "⚠️ Low Balance Warning!"; 
+            alertBox.style.background = "var(--warning)"; 
+            alertBox.style.color = "black"; 
+        } else if (percRemaining <= 50) { 
+            // 50% or less left (This is the new alert you wanted)
+            alertBox.innerText = "💡 Half of your amount is completed!"; 
+            alertBox.style.background = "var(--accent)"; 
+            alertBox.style.color = "white"; 
+        } else { 
+            // More than 50% left - hide the box
+            alertBox.style.display = "none"; 
+        }
+    }
+
+    function resetApp() { 
+        if(confirm("Are you sure? This will delete all your data permanently!")) { 
+            localStorage.clear(); // Clears the browser memory
+            location.reload(); 
+        } 
+    }
+</script>
+
+</body>
+</html>
